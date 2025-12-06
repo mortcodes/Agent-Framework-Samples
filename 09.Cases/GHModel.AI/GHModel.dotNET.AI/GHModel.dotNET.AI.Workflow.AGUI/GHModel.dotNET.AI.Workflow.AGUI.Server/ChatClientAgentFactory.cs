@@ -59,6 +59,16 @@ internal static class ChatClientAgentFactory
             Consider suggestions when refining an idea.
             """;
 
+        var imageAgent = chatClient.CreateAIAgent(
+            name: "PostcardArtist",
+            instructions: """
+                You are a talented travel photographer. 
+                When the concierge finally approves a recommendation, 
+                generate ONE beautiful, realistic postcard-style image of that exact experience.
+                Only generate the image — do not add extra text.
+                """);
+
+        imageAgent.AddTool(new Microsoft.Agents.AI.OpenAI.ImageGenerationTool(chatClient));
         
 
         AIAgent reviewerAgent = chatClient.CreateAIAgent(
@@ -68,6 +78,7 @@ internal static class ChatClientAgentFactory
 
         var workflow = new WorkflowBuilder(frontDeskAgent)
                     .AddEdge(frontDeskAgent, reviewerAgent)
+                    .AddEdge(reviewerAgent, imageAgent)
                     .Build();
 
 

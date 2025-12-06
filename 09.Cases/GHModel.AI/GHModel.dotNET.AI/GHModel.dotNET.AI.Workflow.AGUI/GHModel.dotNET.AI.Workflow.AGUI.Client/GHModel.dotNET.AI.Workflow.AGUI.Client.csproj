@@ -7,10 +7,10 @@
   </PropertyGroup>
 
 
-  
+
   <ItemGroup>
-    <ProjectReference Include="/Users/lokinfey/Desktop/AOAI/Foundry/agent-framework/dotnet/src/Microsoft.Agents.AI/Microsoft.Agents.AI.csproj" />
-    <ProjectReference Include="/Users/lokinfey/Desktop/AOAI/Foundry/agent-framework/dotnet/src/Microsoft.Agents.AI.AGUI/Microsoft.Agents.AI.AGUI.csproj" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-preview.251204.1" />
+    <PackageReference Include="Microsoft.Agents.AI.AGUI" Version="1.0.0-preview.251204.1" />
   </ItemGroup>
   
 </Project>
