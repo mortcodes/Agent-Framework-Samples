@@ -58,41 +58,54 @@ public class FluxImageGenerationTool
     /// </summary>
     public AIFunction GetTool()
     {
-        return AIFunctionFactory.Create(GenerateImageAsync, nameof(GenerateImageAsync), 
-            "Generate a beautiful postcard-style image based on a text prompt using FLUX. Returns the local file path of the generated image.");
+        return AIFunctionFactory.Create(GenerateImageAsync, nameof(GenerateImageAsync),
+            "Forge production-ready hex-based strategy game assets (terrain tiles, character sprites, built features, or UI overlays) using the Together.ai FLUX image API.");
     }
 
     /// <summary>
-    /// Generates an image using the Together.xyz FLUX API.
+    /// Generates an image using the Together.xyz FLUX API tailored for hex-based games.
     /// </summary>
-    /// <param name="prompt">Detailed description of the image to generate. Be specific about the scene, style, lighting, and atmosphere.</param>
-    /// <param name="steps">Number of inference steps (1-4, default 4). Higher values may produce better quality but take longer.</param>
-    /// <param name="numberOfImages">Number of images to generate (1-4, default 1)</param>
-    /// <returns>Result containing the file path of the generated image or an error message</returns>
-    [Description("Generate a beautiful postcard-style image based on a text prompt. Returns the local file path of the generated image.")]
+    [Description("Generate polished art assets for a hex-based strategy game (terrain, character sprites, features, or overlays) using the Together.ai FLUX endpoint. Returns the local PNG path.")]
     public async Task<ImageGenerationResult> GenerateImageAsync(
-        [Description("Detailed description of the image to generate. Be specific about the scene, style, lighting, and atmosphere.")]
-        string prompt,
+        [Description("Gameplay brief describing the desired asset (theme, faction, story beat, mood).")]
+        string gameplayBrief,
+        [Description("Pick the asset type so the tool can shape camera angle and readability (TerrainTile, CharacterSprite, BuiltFeature, SpellEffect, UiOverlay).")]
+        HexAssetType assetType = HexAssetType.TerrainTile,
+        [Description("Background treatment so the asset composites correctly (Transparent, FlatAlbedo, AtmosphericPlate).")]
+        BackgroundTreatment background = BackgroundTreatment.Transparent,
+        [Description("Desired pixel width (256-1024, multiples of 64 recommended). Defaults to 768.")]
+        int width = 768,
+        [Description("Desired pixel height (256-1024, multiples of 64 recommended). Defaults to 768.")]
+        int height = 768,
+        [Description("Optional art-direction or palette hints (comma separated). Example: 'ancient bronze, mossy patina, painterly'.")]
+        string? styleGuide = null,
+        [Description("Deterministic seed (0 = random).")]
+        int seed = 0,
         [Description("Number of inference steps (1-4, default 4). Higher values produce better quality but take longer.")]
         int steps = 4,
-        [Description("Number of images to generate (1-4, default 1)")]
+        [Description("Number of variations to request (1-4, default 1)")]
         int numberOfImages = 1)
     {
         try
         {
-            Console.WriteLine($"[FluxImageTool] Generating image for prompt: {prompt}");
-            
-            // Validate parameters (FLUX.1-schnell only supports 1-4 steps)
+            Console.WriteLine($"[FluxImageTool] Generating hex asset: {gameplayBrief}");
+
             steps = Math.Clamp(steps, 1, 4);
             numberOfImages = Math.Clamp(numberOfImages, 1, 4);
+            width = NormalizeDimension(width);
+            height = NormalizeDimension(height);
 
-            // Build the request body matching the Together.xyz API
+            var engineeredPrompt = BuildHexPrompt(gameplayBrief, assetType, background, styleGuide);
+
             var requestBody = new TogetherImageRequest
             {
                 Model = _model,
-                Prompt = prompt,
+                Prompt = engineeredPrompt,
                 Steps = steps,
-                N = numberOfImages
+                N = numberOfImages,
+                Width = width,
+                Height = height,
+                Seed = seed > 0 ? seed : null
             };
 
             var jsonContent = JsonSerializer.Serialize(requestBody, new JsonSerializerOptions 
@@ -118,7 +131,11 @@ public class FluxImageGenerationTool
                 {
                     Success = false,
                     Error = $"API request failed: {response.StatusCode} - {responseBody}",
-                    Prompt = prompt
+                    Prompt = gameplayBrief,
+                    AssetType = assetType,
+                    Background = background,
+                    Width = width,
+                    Height = height
                 };
             }
 
@@ -134,7 +151,11 @@ public class FluxImageGenerationTool
                 {
                     Success = false,
                     Error = "No images were returned from the API",
-                    Prompt = prompt
+                    Prompt = gameplayBrief,
+                    AssetType = assetType,
+                    Background = background,
+                    Width = width,
+                    Height = height
                 };
             }
 
@@ -164,7 +185,11 @@ public class FluxImageGenerationTool
                 {
                     Success = false,
                     Error = "Image data not found in response (no URL or base64 data)",
-                    Prompt = prompt
+                    Prompt = gameplayBrief,
+                    AssetType = assetType,
+                    Background = background,
+                    Width = width,
+                    Height = height
                 };
             }
 
@@ -174,10 +199,17 @@ public class FluxImageGenerationTool
             {
                 Success = true,
                 FilePath = filePath,
-                Prompt = prompt,
-                RevisedPrompt = firstImage.RevisedPrompt,
+                Prompt = gameplayBrief,
+                RevisedPrompt = firstImage.RevisedPrompt ?? engineeredPrompt,
                 Model = _model,
-                ImagesGenerated = togetherResponse.Data.Count
+                ImagesGenerated = togetherResponse.Data.Count,
+                AssetType = assetType,
+                Background = background,
+                Width = width,
+                Height = height,
+                AppliedStyleGuide = styleGuide,
+                Seed = requestBody.Seed,
+                GeneratedPrompt = engineeredPrompt
             };
         }
         catch (HttpRequestException ex)
@@ -187,7 +219,11 @@ public class FluxImageGenerationTool
             {
                 Success = false,
                 Error = $"HTTP request failed: {ex.Message}",
-                Prompt = prompt
+                Prompt = gameplayBrief,
+                AssetType = assetType,
+                Background = background,
+                Width = width,
+                Height = height
             };
         }
         catch (Exception ex)
@@ -197,10 +233,65 @@ public class FluxImageGenerationTool
             {
                 Success = false,
                 Error = $"Image generation failed: {ex.Message}",
-                Prompt = prompt
+                Prompt = gameplayBrief,
+                AssetType = assetType,
+                Background = background,
+                Width = width,
+                Height = height
             };
         }
     }
+
+    private static int NormalizeDimension(int value)
+    {
+        var clamped = Math.Clamp(value, 256, 1024);
+        var remainder = clamped % 64;
+        if (remainder == 0)
+        {
+            return clamped;
+        }
+
+        var roundedUp = clamped + (64 - remainder);
+        return roundedUp <= 1024 ? roundedUp : clamped - remainder;
+    }
+
+    private static string BuildHexPrompt(string gameplayBrief, HexAssetType assetType, BackgroundTreatment background, string? styleGuide)
+    {
+        var sb = new StringBuilder();
+        sb.Append("Create a production-ready illustration for a premium hex-based strategy game. ");
+        sb.Append(GetAssetTypeGuidance(assetType));
+        sb.Append(' ');
+        sb.Append(GetBackgroundGuidance(background));
+        sb.Append(" Maintain crisp readability when scaled to small hex tiles. Use board-game friendly lighting, subtle rim lights, and clearly defined silhouettes. ");
+
+        if (!string.IsNullOrWhiteSpace(styleGuide))
+        {
+            sb.Append($"Style guide: {styleGuide}. ");
+        }
+
+        sb.Append($"Player request: {gameplayBrief}. ");
+        sb.Append("Render as a high-quality PNG asset.");
+
+        return sb.ToString();
+    }
+
+    private static string GetAssetTypeGuidance(HexAssetType assetType) => assetType switch
+    {
+        HexAssetType.TerrainTile => "Depict a seamless top-down terrain tile with isometric lighting and edge falloff that fits perfectly inside a hex.",
+        HexAssetType.CharacterSprite => "Depict a character or creature hero token viewed slightly from above (15 degree tilt) with heroic pose and readable faction markings.",
+        HexAssetType.BuiltFeature => "Depict a constructed feature (city, fortress, wonder, outpost) centered inside the hex with clear architectural silhouette and depth cues.",
+        HexAssetType.SpellEffect => "Depict an energetic spell or status effect hovering over a hex, with layered glows and directional motion.",
+        HexAssetType.UiOverlay => "Design a flat illustrative overlay icon that can sit on top of a hex tile, using transparent background and minimal shading.",
+        _ => "Depict a reusable asset for a hex-based map with clear silhouette.",
+    };
+
+    private static string GetBackgroundGuidance(BackgroundTreatment background) => background switch
+    {
+        BackgroundTreatment.Transparent => "Use a perfectly transparent background (alpha channel) so the asset composites seamlessly.",
+        BackgroundTreatment.FlatAlbedo => "Use a flat neutral background (#0F1116) with soft vignette for easy keying.",
+        BackgroundTreatment.AtmosphericPlate => "Use a subtle atmospheric backdrop that reinforces depth but keeps edges readable.",
+        _ => string.Empty
+    };
 }
 
 #region Together.xyz API Request/Response Models
@@ -217,7 +308,7 @@ public class TogetherImageRequest
     public string Prompt { get; set; } = string.Empty;
     
     [JsonPropertyName("steps")]
-    public int Steps { get; set; } = 10;
+    public int Steps { get; set; } = 4;
     
     [JsonPropertyName("n")]
     public int N { get; set; } = 1;
@@ -300,12 +391,49 @@ public class ImageGenerationResult
     [JsonPropertyName("error")]
     public string? Error { get; set; }
     
+    [JsonPropertyName("assetType")]
+    public HexAssetType AssetType { get; set; } = HexAssetType.TerrainTile;
+    
+    [JsonPropertyName("background")]
+    public BackgroundTreatment Background { get; set; } = BackgroundTreatment.Transparent;
+    
+    [JsonPropertyName("width")]
+    public int Width { get; set; }
+    
+    [JsonPropertyName("height")]
+    public int Height { get; set; }
+    
+    [JsonPropertyName("styleGuide")]
+    public string? AppliedStyleGuide { get; set; }
+    
+    [JsonPropertyName("seed")]
+    public int? Seed { get; set; }
+    
+    [JsonPropertyName("engineeredPrompt")]
+    public string? GeneratedPrompt { get; set; }
+    
     public override string ToString()
     {
         if (Success)
         {
-            return $"Image generated successfully and saved to: {FilePath}";
+            return $"Hex asset ({AssetType}) generated at {Width}x{Height}px and saved to: {FilePath}";
         }
         return $"Image generation failed: {Error}";
     }
+}
+
+public enum HexAssetType
+{
+    TerrainTile,
+    CharacterSprite,
+    BuiltFeature,
+    SpellEffect,
+    UiOverlay
+}
+
+public enum BackgroundTreatment
+{
+    Transparent,
+    FlatAlbedo,
+    AtmosphericPlate
 }
