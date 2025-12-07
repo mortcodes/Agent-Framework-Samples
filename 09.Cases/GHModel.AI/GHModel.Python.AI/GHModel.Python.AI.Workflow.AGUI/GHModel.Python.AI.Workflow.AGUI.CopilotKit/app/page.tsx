@@ -51,7 +51,7 @@ const Chat = () => {
       >
         <CopilotChat
           className="h-full w-full rounded-2xl"
-          labels={{ initial: "Hi, I'm your travel agent. How can I assist you today?" }}
+          labels={{ initial: "Hi, I'm your game design assistant. How can I assist you today?" }}
         />
       </div>
     </div>

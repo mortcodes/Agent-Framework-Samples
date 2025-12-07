@@ -42,22 +42,31 @@ internal static class ChatClientAgentFactory
         var chatClient = _openAIClient!.GetChatClient(github_model_id!).AsIChatClient();
 
 
-        string ReviewerAgentName = "Concierge";
-        string ReviewerAgentInstructions = @"
-            You are an are hotel concierge who has opinions about providing the most local and authentic experiences for travelers.
-            The goal is to determine if the front desk travel agent has recommended the best non-touristy experience for a traveler.
-            If so, state that it is approved.
-            If not, provide insight on how to refine the recommendation without using a specific example. ";
+                string ArchitectureAgentName = "SolutionArchitect";
+                string ArchitectureAgentInstructions = """
+                        You are the principal software solution architect for the studio.
+                        Your output must always be a Markdown specification that a downstream software development agent can implement directly.
+                        For every concept you receive:
+                            1. Start with an **Executive Summary** section describing the gameplay objective and KPIs.
+                            2. Add **System Diagram Notes** that list required services (simulation, networking, persistence, telemetry, tooling) and explicit integration points.
+                            3. Provide an **API & Data Contracts** table, including method signatures, payload schemas, and reliability/scalability callouts.
+                            4. Document an **Event & Sequence Flow** section in ordered steps so engineers understand runtime orchestration.
+                            5. Close with **Cross-Cutting Concerns** covering save/load, localization, accessibility, live ops instrumentation, testing hooks, and open risks.
+                        Use concise Markdown headings, bullet lists, and tables so another agent can copy/paste the spec into a ticket.
+                        Reject incomplete upstream proposals by adding a "Blocked" subsection that lists missing inputs.
+                        """;
 
-        string FrontDeskAgentName = "FrontDesk";
-        string FrontDeskAgentInstructions = @"""
-            You are a Front Desk Travel Agent with ten years of experience and are known for brevity as you deal with many customers.
-            The goal is to provide the best activities and locations for a traveler to visit.
-            Only provide a single recommendation per response.
-            You're laser focused on the goal at hand.
-            Don't waste time with chit chat.
-            Consider suggestions when refining an idea.
-            """;
+                string GameDesignerAgentName = "GameDesigner";
+                string GameDesignerAgentInstructions = """
+                        You are the lead systems designer on a premium hex-based strategy game.
+                        Every game concept must be transformed into a compelling in-game feature, quest hook, or progression beat.
+                        Collaborate with the SolutionArchitect by:
+                            • Identifying the core player fantasy and the gameplay problem it solves.
+                            • Defining the mechanics: victory conditions, resource flows, hazards, or unit abilities tied to the concept.
+                            • Highlighting UX moments that make the encounter memorable (camera cues, UI prompts, feedback effects).
+                            • Suggesting how the feature scales across early, mid, and late game without overwhelming the player.
+                        Respond crisply with numbered design beats so downstream artists and engineers can implement without guesswork.
+                        """;
 
         // Create the Flux image generation tool using the web API
         var fluxImageTool = new FluxImageGenerationTool();
@@ -78,18 +87,18 @@ internal static class ChatClientAgentFactory
             tools: [fluxImageTool.GetTool()]);
         
 
-        AIAgent reviewerAgent = chatClient.CreateAIAgent(
-            name:ReviewerAgentName,instructions:ReviewerAgentInstructions);
-        AIAgent frontDeskAgent  = chatClient.CreateAIAgent(
-            name:FrontDeskAgentName,instructions:FrontDeskAgentInstructions);
+        AIAgent architectureAgent = chatClient.CreateAIAgent(
+            name:ArchitectureAgentName,instructions:ArchitectureAgentInstructions);
+        AIAgent gameDesignerAgent  = chatClient.CreateAIAgent(
+            name:GameDesignerAgentName,instructions:GameDesignerAgentInstructions);
 
-        var workflow = new WorkflowBuilder(frontDeskAgent)
-                    .AddEdge(frontDeskAgent, reviewerAgent)
-                    .AddEdge(reviewerAgent, imageAgent)
+        var workflow = new WorkflowBuilder(gameDesignerAgent)
+                    .AddEdge(gameDesignerAgent, architectureAgent)
+                    .AddEdge(architectureAgent, imageAgent)
                     .Build();
 
 
-        AIAgent workflow_agent = workflow.AsAgent("travel-workflow","travel recommendation workflow");
+        AIAgent workflow_agent = workflow.AsAgent("game-design-workflow","game design workflow");
 
         return workflow_agent;
     }
