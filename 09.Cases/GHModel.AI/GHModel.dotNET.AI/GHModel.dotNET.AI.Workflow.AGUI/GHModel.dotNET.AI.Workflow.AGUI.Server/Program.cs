@@ -17,6 +17,13 @@ using DotNetEnv;
 
 Env.Load(".env");
 
+// Check for test mode
+if (args.Contains("--test-image"))
+{
+    await TestImageTool.RunTest();
+    return;
+}
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpLogging(logging =>

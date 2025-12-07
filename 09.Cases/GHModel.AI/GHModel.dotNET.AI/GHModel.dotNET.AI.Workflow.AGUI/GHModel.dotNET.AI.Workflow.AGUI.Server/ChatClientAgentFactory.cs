@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using Azure.AI.OpenAI;
 using Azure.Identity;
-
+using GHModel.dotNET.AI.Workflow.AGUI.Server;
 
 using Microsoft.Agents.AI;  
 using Microsoft.Agents.AI.Hosting.AGUI.AspNetCore;
@@ -59,6 +59,9 @@ internal static class ChatClientAgentFactory
             Consider suggestions when refining an idea.
             """;
 
+        // Create the Flux image generation tool using the web API
+        var fluxImageTool = new FluxImageGenerationTool();
+        
         var imageAgent = chatClient.CreateAIAgent(
             name: "PostcardArtist",
             instructions: """
@@ -66,9 +69,9 @@ internal static class ChatClientAgentFactory
                 When the concierge finally approves a recommendation, 
                 generate ONE beautiful, realistic postcard-style image of that exact experience.
                 Only generate the image — do not add extra text.
-                """);
-
-        imageAgent.AddTool(new Microsoft.Agents.AI.OpenAI.ImageGenerationTool(chatClient));
+                Use the GenerateImageAsync tool to create the image with a detailed prompt.
+                """,
+            tools: [fluxImageTool.GetTool()]);
         
 
         AIAgent reviewerAgent = chatClient.CreateAIAgent(
